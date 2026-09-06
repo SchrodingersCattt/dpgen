@@ -220,6 +220,29 @@ def _get_train_backend_flag(jdata) -> str:
     return config["flag"]
 
 
+def _get_export_command(mdata, backend_flag) -> str:
+    """Return the deployment-side DeePMD export command.
+
+    Parameters
+    ----------
+    mdata : dict
+        Machine configuration, optionally including ``train_export_command``.
+    backend_flag : str
+        DeePMD CLI flag required by the training checkpoint backend.
+
+    Returns
+    -------
+    str
+        Deployment-side DeePMD command with the required backend flag.
+    """
+    export_command = mdata.get(
+        "train_export_command", mdata.get("train_command", "dp")
+    ).strip()
+    if backend_flag:
+        export_command += f" {backend_flag}"
+    return export_command
+
+
 def _get_input_model_suffix(models) -> str:
     """Return the common suffix of input models."""
     suffixes = {Path(model).suffix.lower() for model in models}
@@ -1010,6 +1033,7 @@ def run_train_dp(iter_index, jdata, mdata):
     backend_flag = _get_train_backend_flag(jdata)
     if backend_flag:
         train_command += f" {backend_flag}"
+    export_command = _get_export_command(mdata, backend_flag)
 
     # paths
     iter_name = make_iter_name(iter_index)
@@ -1052,15 +1076,15 @@ def run_train_dp(iter_index, jdata, mdata):
         if model_format == "pt2":
             if train_backend == "pytorch-exportable":
                 command = (
-                    f"{train_command} freeze -c model.ckpt.pt -o frozen_model "
+                    f"{export_command} freeze -c model.ckpt.pt -o frozen_model "
                     "--lower-kind graph"
                 )
             else:
-                command = f"{train_command} freeze -c model.ckpt.pt -o frozen_model"
+                command = f"{export_command} freeze -c model.ckpt.pt -o frozen_model"
             export_commands.append(command)
             if jdata.get("dp_compress", False):
                 export_commands.append(
-                    f"{train_command} compress -i frozen_model{suffix} "
+                    f"{export_command} compress -i frozen_model{suffix} "
                     f"-o frozen_model_compressed{suffix}"
                 )
         else:
@@ -1179,20 +1203,27 @@ def run_train_dp(iter_index, jdata, mdata):
     ### Submit jobs
     check_api_version(mdata)
 
-    submission = make_submission(
-        mdata["train_machine"],
-        mdata["train_resources"],
-        commands=commands,
-        work_path=work_path,
-        run_tasks=run_tasks,
-        group_size=train_group_size,
-        forward_common_files=trans_comm_data,
-        forward_files=forward_files,
-        backward_files=backward_files,
-        outlog="train.log",
-        errlog="train.log",
+    checkpoints_complete = export_commands and all(
+        os.path.isfile(os.path.join(task, f"model.ckpt{checkpoint_suffix}"))
+        for task in all_task
     )
-    submission.run_submission()
+    if checkpoints_complete:
+        log_task("training checkpoints found, skip training and retry model export")
+    else:
+        submission = make_submission(
+            mdata["train_machine"],
+            mdata["train_resources"],
+            commands=commands,
+            work_path=work_path,
+            run_tasks=run_tasks,
+            group_size=train_group_size,
+            forward_common_files=trans_comm_data,
+            forward_files=forward_files,
+            backward_files=backward_files,
+            outlog="train.log",
+            errlog="train.log",
+        )
+        submission.run_submission()
     if export_commands:
         export_backward_files = [f"frozen_model{suffix}"]
         if jdata.get("dp_compress", False):
@@ -1821,8 +1852,8 @@ def _validate_pt2_template_atom_map(lmp_lines):
     Raises
     ------
     ValueError
-        If ``atom_modify map yes`` is missing or follows ``read_data`` or
-        ``read_restart``.
+        If ``atom_modify map yes``, ``array``, or ``hash`` is missing or
+        follows ``read_data`` or ``read_restart``.
     """
     atom_map_index = None
     read_index = None
@@ -1832,7 +1863,7 @@ def _validate_pt2_template_atom_map(lmp_lines):
         if not tokens:
             continue
         if tokens[0] == "atom_modify" and any(
-            tokens[index : index + 2] == ["map", "yes"]
+            tokens[index] == "map" and tokens[index + 1] in {"yes", "array", "hash"}
             for index in range(1, len(tokens) - 1)
         ):
             atom_map_index = line_index
@@ -1842,7 +1873,8 @@ def _validate_pt2_template_atom_map(lmp_lines):
         raise ValueError("pt2 LAMMPS templates require read_data or read_restart.")
     if atom_map_index is None or atom_map_index > read_index:
         raise ValueError(
-            "pt2 LAMMPS templates require 'atom_modify map yes' before read_data or read_restart."
+            "pt2 LAMMPS templates require 'atom_modify map yes', 'array', or "
+            "'hash' before read_data or read_restart."
         )
 
 

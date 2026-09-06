@@ -68,6 +68,24 @@ def _make_calypso_opt_command(deepmdkit_python, model_name):
     )
 
 
+def _make_calypso_check_command(deepmdkit_python, model_name):
+    """Build the CALYPSO recovery command for a resolved model.
+
+    Parameters
+    ----------
+    deepmdkit_python : str
+        Python executable used by the DeePMD environment.
+    model_name : str
+        Filename of the model artifact forwarded to CALYPSO.
+
+    Returns
+    -------
+    str
+        Shell command that invokes the CALYPSO recovery script.
+    """
+    return f"{deepmdkit_python} check_outcar.py --model ../{model_name}"
+
+
 def gen_structures(
     iter_index,
     jdata,
@@ -122,10 +140,11 @@ def gen_structures(
     model_names = [os.path.basename(ii) for ii in all_models]
 
     deepmdkit_python = mdata.get("model_devi_deepmdkit_python")
-    command = _make_calypso_opt_command(deepmdkit_python, sorted(model_names)[0])
+    model_name = sorted(model_names)[0]
+    command = _make_calypso_opt_command(deepmdkit_python, model_name)
     # command = "%s calypso_run_opt.py %s 1>> model_devi.log 2>> model_devi.log" % (deepmdkit_python,os.path.abspath(calypso_run_opt_path))
     # command += "  ||  %s check_outcar.py %s " % (deepmdkit_python,os.path.abspath(calypso_run_opt_path))
-    command += f"  ||  {deepmdkit_python} check_outcar.py  "
+    command += f"  ||  {_make_calypso_check_command(deepmdkit_python, model_name)}"
     commands = [command]
 
     cwd = os.getcwd()

@@ -5,12 +5,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from dpgen.generator.arginfo import run_mdata_arginfo
 from dpgen.generator.lib.run_calypso import (
     _find_models,
+    _make_calypso_check_command,
     _make_calypso_opt_command,
 )
 from dpgen.generator.run import (
     _get_checkpoint_suffix,
+    _get_export_command,
     _get_input_model_suffix,
     _get_model_suffix,
     _get_train_backend_flag,
@@ -79,6 +82,11 @@ class TestDeepmdBackendConfig(unittest.TestCase):
         _validate_pt2_template_atom_map(
             ["atom_modify map yes\n", "read_data conf.lmp\n"]
         )
+        for atom_map in ("array", "hash"):
+            with self.subTest(atom_map=atom_map):
+                _validate_pt2_template_atom_map(
+                    [f"atom_modify map {atom_map}\n", "read_data conf.lmp\n"]
+                )
         for lines in (
             ["read_data conf.lmp\n"],
             ["read_restart restart.100\n", "atom_modify map yes\n"],
@@ -89,7 +97,7 @@ class TestDeepmdBackendConfig(unittest.TestCase):
             ],
         ):
             with self.subTest(lines=lines):
-                with self.assertRaisesRegex(ValueError, "atom_modify map yes"):
+                with self.assertRaisesRegex(ValueError, "atom_modify map"):
                     _validate_pt2_template_atom_map(lines)
         with self.assertRaisesRegex(ValueError, "read_data or read_restart"):
             _validate_pt2_template_atom_map(["atom_modify map yes\n"])
@@ -187,6 +195,23 @@ class TestDeepmdBackendConfig(unittest.TestCase):
         command = _make_calypso_opt_command("python", "graph.000.pt2")
         self.assertIn("calypso_run_opt.py --model ../graph.000.pt2", command)
 
+    def test_calypso_recovery_uses_resolved_model(self):
+        command = _make_calypso_check_command("python", "graph.000.pt2")
+        self.assertEqual(command, "python check_outcar.py --model ../graph.000.pt2")
+
+    def test_export_command_uses_deployment_executable(self):
+        self.assertEqual(
+            _get_export_command(
+                {"train_command": "/train/dp", "train_export_command": "/deploy/dp"},
+                "--pt",
+            ),
+            "/deploy/dp --pt",
+        )
+
+    def test_export_command_is_accepted_in_machine_configuration(self):
+        train = run_mdata_arginfo().sub_fields["train"]
+        self.assertIn("export_command", train.sub_fields)
+
 
 class TestRunTrainDeepmdBackend(unittest.TestCase):
     def setUp(self):
@@ -243,6 +268,41 @@ class TestRunTrainDeepmdBackend(unittest.TestCase):
         )
         self.assertEqual(export_call["forward_files"], ["model.ckpt.pt"])
         self.assertIn("frozen_model.pt2", export_call["backward_files"])
+
+    def test_pt2_export_uses_deployment_command(self):
+        self.mdata["train_command"] = "/train/dp"
+        self.mdata["train_export_command"] = "/deploy/dp"
+        _, export_call = self._run(
+            train_backend="pytorch",
+            model_format="pt2",
+            default_training_param={"model": {"type": "dpa4"}},
+        )
+        self.assertEqual(
+            export_call["commands"],
+            ["/deploy/dp --pt freeze -c model.ckpt.pt -o frozen_model"],
+        )
+
+    def test_pt2_export_reuses_completed_training_checkpoints(self):
+        task = Path("iter.000000") / "00.train" / "000"
+        task.mkdir(parents=True)
+        (task / "model.ckpt.pt").touch()
+        with patch("dpgen.generator.run.make_submission") as make_submission:
+            run_train_dp(
+                0,
+                {
+                    "numb_models": 1,
+                    "one_h5": True,
+                    "train_backend": "pytorch",
+                    "model_format": "pt2",
+                    "default_training_param": {"model": {"type": "dpa4"}},
+                },
+                self.mdata,
+            )
+        self.assertEqual(make_submission.call_count, 1)
+        self.assertEqual(
+            make_submission.call_args.kwargs["commands"],
+            ["dp --pt freeze -c model.ckpt.pt -o frozen_model"],
+        )
 
     def test_legacy_pytorch_commands_are_preserved(self):
         call = self._run(train_backend="pytorch")

@@ -14,7 +14,18 @@ def run_mdata_arginfo() -> Argument:
     Argument
         arginfo
     """
-    return general_mdata_arginfo("run_mdata", ("train", "model_devi", "fp"))
+    arginfo = general_mdata_arginfo("run_mdata", ("train", "model_devi", "fp"))
+    train = arginfo.sub_fields["train"]
+    train.sub_fields["export_command"] = Argument(
+        "export_command",
+        str,
+        optional=True,
+        doc=(
+            "DeePMD command used to freeze and compress pt2 models on the "
+            "model-deviation machine. Defaults to train.command."
+        ),
+    )
+    return arginfo
 
 
 # basics
