@@ -56,6 +56,28 @@ class TestMakeLammpsInput(unittest.TestCase):
         self.assertNotIn("hybrid/overlay", result)
         self.assertNotIn("dispersion/d3", result)
 
+    def test_type_map_is_passed_to_deepmd(self):
+        """Map LAMMPS types even when the model order is reversed."""
+        result = make_lammps_input(
+            self.ensemble,
+            self.conf_file,
+            self.graphs,
+            self.nsteps,
+            self.dt,
+            self.neidelay,
+            self.trj_freq,
+            self.mass_map,
+            self.temp,
+            {
+                "type_map": ["Mg", "Al"],
+                "default_training_param": {"model": {"type_map": ["Al", "Mg"]}},
+            },
+            pres=1.0,
+            deepmd_version=self.deepmd_version,
+        )
+
+        self.assertIn("pair_coeff      * * Mg Al\n", result)
+
     def test_d3_enabled_basic(self):
         """Test LAMMPS input with D3 dispersion enabled."""
         jdata = {
@@ -65,7 +87,8 @@ class TestMakeLammpsInput(unittest.TestCase):
                 "functional": "pbe",
                 "cutoff": 30.0,
                 "cn_cutoff": 20.0,
-            }
+            },
+            "type_map": ["H", "O"],
         }
 
         result = make_lammps_input(
@@ -86,6 +109,8 @@ class TestMakeLammpsInput(unittest.TestCase):
         # Should contain hybrid/overlay pair_style
         self.assertIn("pair_style      hybrid/overlay deepmd model.pb", result)
         self.assertIn("dispersion/d3 original pbe 30.0 20.0", result)
+        self.assertIn("pair_coeff      * * deepmd H O", result)
+        self.assertIn("pair_coeff      * * dispersion/d3 H O", result)
 
         # Should contain both pair_coeff lines
         lines = result.split("\n")

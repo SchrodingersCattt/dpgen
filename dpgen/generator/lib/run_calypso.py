@@ -493,6 +493,11 @@ def run_calypso_model_devi(iter_index, jdata, mdata):
             # Model Devi
             _calypso_run_opt_path = os.path.abspath(caly_run_opt_list[0])
             all_models = glob.glob(os.path.join(_calypso_run_opt_path, "graph*pb"))
+            model_type_map = (
+                jdata.get("default_training_param", {})
+                .get("model", {})
+                .get("type_map", jdata["type_map"])
+            )
             cwd = os.getcwd()
             os.chdir(calypso_model_devi_path)
             args = " ".join(
@@ -502,6 +507,8 @@ def run_calypso_model_devi(iter_index, jdata, mdata):
                     " ".join(all_models),
                     "--type_map",
                     " ".join(jdata.get("type_map")),
+                    "--model_type_map",
+                    " ".join(model_type_map),
                 ]
             )
             deepmdkit_python = mdata.get("model_devi_deepmdkit_python")

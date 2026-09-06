@@ -482,6 +482,13 @@ def make_train_dp(iter_index, jdata, mdata):
             isinstance(old_batch_size, str) and old_batch_size.startswith("mixed:")
         ):
             jinput["training"]["training_data"]["batch_size"] = init_batch_size
+        if (
+            Version(mdata["deepmd_version"]) >= Version("3")
+            and jdata.get("train_backend") == "pytorch"
+        ):
+            # DeePMD-kit PyTorch requires model.type_map, but preserve an
+            # explicitly configured model order.
+            jinput["model"].setdefault("type_map", jdata["type_map"])
         # electron temperature
         if use_ele_temp == 0:
             pass
@@ -1130,40 +1137,80 @@ def revise_lmp_input_model(
 
 
 def revise_lmp_input_pair_coeff(lmp_lines, jdata=None):
-    """Update pair_coeff lines for D3 support."""
+    """Add explicit DeepMD element mapping and D3 pair coefficients."""
     if jdata is None:
         return lmp_lines
 
     lmp_d3 = jdata.get("lmp_d3", {})
     d3_enabled = lmp_d3.get("enable", False) if lmp_d3 else False
-
-    if not d3_enabled:
-        return lmp_lines
-
-    # D3 requires type maps (element symbols)
     type_map = jdata.get("type_map", [])
     type_map_str = " ".join(type_map)
+    type_map_args = f" {type_map_str}" if type_map_str else ""
 
-    # Find pair_coeff line
-    pair_coeff_idx = None
+    if not d3_enabled and not type_map:
+        return lmp_lines
+
+    pair_style_idx = find_only_one_key(lmp_lines, ["pair_style"])
+    pair_style_tokens = lmp_lines[pair_style_idx].partition("#")[0].split()
+    hybrid_pair_style = pair_style_tokens[1].startswith("hybrid")
+
+    deepmd_coeff_idx = None
+    fallback_coeff_idx = None
+    d3_coeff_idx = None
     for idx, line in enumerate(lmp_lines):
-        if line.strip().startswith("pair_coeff") and "* *" in line:
-            pair_coeff_idx = idx
-            break
+        tokens = line.partition("#")[0].split()
+        if not tokens or tokens[0] != "pair_coeff":
+            continue
+        if "dispersion/d3" in tokens:
+            d3_coeff_idx = idx
+        elif tokens[3:4] == ["deepmd"] and deepmd_coeff_idx is None:
+            deepmd_coeff_idx = idx
+        elif fallback_coeff_idx is None:
+            fallback_coeff_idx = idx
 
-    if pair_coeff_idx is None:
-        # If no pair_coeff found, add them after pair_style
-        pair_style_idx = find_only_one_key(lmp_lines, ["pair_style"])
-        lmp_lines.insert(pair_style_idx + 1, "pair_coeff      * * deepmd\n")
-        lmp_lines.insert(
-            pair_style_idx + 2, f"pair_coeff      * * dispersion/d3 {type_map_str}\n"
+    if deepmd_coeff_idx is None and fallback_coeff_idx is not None:
+        fallback_tokens = lmp_lines[fallback_coeff_idx].partition("#")[0].split()
+        fallback_is_bare = fallback_tokens in (
+            ["pair_coeff"],
+            ["pair_coeff", "*", "*"],
         )
+        if not hybrid_pair_style or (d3_enabled and fallback_is_bare):
+            deepmd_coeff_idx = fallback_coeff_idx
+
+    if deepmd_coeff_idx is None:
+        deepmd_coeff_idx = pair_style_idx + 1
+        style = " deepmd" if d3_enabled or hybrid_pair_style else ""
+        lmp_lines.insert(
+            deepmd_coeff_idx, f"pair_coeff      * *{style}{type_map_args}\n"
+        )
+        if d3_coeff_idx is not None and d3_coeff_idx >= deepmd_coeff_idx:
+            d3_coeff_idx += 1
     else:
-        # Replace existing pair_coeff with D3 version
-        lmp_lines[pair_coeff_idx] = "pair_coeff      * * deepmd\n"
-        lmp_lines.insert(
-            pair_coeff_idx + 1, f"pair_coeff      * * dispersion/d3 {type_map_str}\n"
+        tokens = lmp_lines[deepmd_coeff_idx].partition("#")[0].split()
+        bare_coeff = tokens in (
+            ["pair_coeff"],
+            ["pair_coeff", "*", "*"],
+            ["pair_coeff", "*", "*", "deepmd"],
         )
+        if d3_enabled:
+            if tokens[:3] == ["pair_coeff", "*", "*"]:
+                elements = tokens[4:] if tokens[3:4] == ["deepmd"] else tokens[3:]
+            else:
+                elements = []
+            element_args = f" {' '.join(elements)}" if elements else type_map_args
+            lmp_lines[deepmd_coeff_idx] = f"pair_coeff      * * deepmd{element_args}\n"
+        elif bare_coeff:
+            style = " deepmd" if tokens[3:4] == ["deepmd"] else ""
+            lmp_lines[deepmd_coeff_idx] = f"pair_coeff      * *{style}{type_map_args}\n"
+
+    if d3_enabled:
+        d3_line = f"pair_coeff      * * dispersion/d3 {type_map_str}\n"
+        if d3_coeff_idx is None:
+            lmp_lines.insert(deepmd_coeff_idx + 1, d3_line)
+        else:
+            d3_tokens = lmp_lines[d3_coeff_idx].partition("#")[0].split()
+            if d3_tokens == ["pair_coeff", "*", "*", "dispersion/d3"]:
+                lmp_lines[d3_coeff_idx] = d3_line
 
     return lmp_lines
 
