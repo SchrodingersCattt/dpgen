@@ -974,7 +974,7 @@ def _normalize_conditioning(jdata):
     use_ele_temp = jdata.get("use_ele_temp", 0)
     if raw is not None and not isinstance(raw, dict):
         raise TypeError("conditioning must be a mapping when provided")
-    if raw is not None and use_ele_temp:
+    if raw and use_ele_temp:
         raise ValueError(
             "conditioning and nonzero use_ele_temp cannot be configured together"
         )
@@ -1237,7 +1237,7 @@ def make_train_dp(iter_index, jdata, mdata):
     model_devi_jobs = jdata["model_devi_jobs"]
     use_ele_temp = jdata.get("use_ele_temp", 0)
     conditioning = _normalize_conditioning(jdata)
-    explicit_conditioning = jdata.get("conditioning") is not None
+    explicit_conditioning = bool(jdata.get("conditioning"))
     training_iter0_model = jdata.get("training_iter0_model_path", [])
     training_init_model = jdata.get("training_init_model", False)
     training_reuse_iter = jdata.get("training_reuse_iter")
@@ -5765,7 +5765,7 @@ def run_iter(param_file, machine_file):
 
     # set up generic conditioning data types, or the legacy alias
     use_ele_temp = jdata.get("use_ele_temp", 0)
-    if jdata.get("conditioning") is not None:
+    if jdata.get("conditioning"):
         setup_conditioning(_normalize_conditioning(jdata))
     elif use_ele_temp == 1:
         setup_ele_temp(False)
