@@ -1016,9 +1016,7 @@ def _normalize_conditioning(jdata):
                     f"conditioning.{location} contains duplicate name {name!r}"
                 )
             names.add(name)
-            normalized[location].append(
-                {"name": name, "source": source, "dim": dim}
-            )
+            normalized[location].append({"name": name, "source": source, "dim": dim})
     return normalized
 
 
