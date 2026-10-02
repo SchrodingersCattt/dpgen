@@ -13,12 +13,12 @@ from dpgen.generator.lib.run_calypso import (
     _make_calypso_opt_command,
 )
 from dpgen.generator.run import (
+    _extract_conditioning_arrays,
     _get_checkpoint_suffix,
     _get_export_command,
     _get_input_model_suffix,
     _get_model_suffix,
     _get_train_backend_flag,
-    _extract_conditioning_arrays,
     _normalize_conditioning,
     _normalize_training_params,
     _prepare_training_input,

@@ -1052,7 +1052,10 @@ def _extract_conditioning_arrays(job_data, conditioning, natoms):
                 raise RuntimeError("job.json.params must be a mapping")
             value = params.get(
                 item["source"],
-                params.get(item["name"], job_data.get(item["source"], job_data.get(item["name"]))),
+                params.get(
+                    item["name"],
+                    job_data.get(item["source"], job_data.get(item["name"])),
+                ),
             )
             if value is None:
                 raise RuntimeError(
