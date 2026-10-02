@@ -3367,9 +3367,7 @@ def _read_model_devi_file(
     model_devi_merge_traj: bool = False,
 ):
     model_devi_file = os.path.join(task_path, "model_devi.out")
-    model_devi_bead_files = glob.glob(
-        os.path.join(task_path, "model_devi[0-9]*.out")
-    )
+    model_devi_bead_files = glob.glob(os.path.join(task_path, "model_devi[0-9]*.out"))
     if not os.path.isfile(model_devi_file) and not model_devi_bead_files:
         raise FileNotFoundError(
             f"No model deviation output found in {task_path!r}; expected "
