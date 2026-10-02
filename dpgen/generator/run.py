@@ -1049,7 +1049,13 @@ def _extract_conditioning_arrays(job_data, conditioning, natoms):
     for location in ("fparam", "aparam"):
         values = []
         for item in conditioning[location]:
-            value = job_data.get(item["source"], job_data.get(item["name"]))
+            params = job_data.get("params", {})
+            if not isinstance(params, dict):
+                raise RuntimeError("job.json.params must be a mapping")
+            value = params.get(
+                item["source"],
+                params.get(item["name"], job_data.get(item["source"], job_data.get(item["name"]))),
+            )
             if value is None:
                 raise RuntimeError(
                     f"conditioning source {item['source']!r} is missing from job.json"
@@ -2582,7 +2588,11 @@ def _make_model_devi_revmat(iter_index, jdata, mdata, conf_systems):
         raise RuntimeError("system index should be uniq")
 
     use_ele_temp = jdata.get("use_ele_temp", 0)
-    conditioning = _normalize_conditioning(jdata)
+    conditioning = (
+        _normalize_conditioning(jdata)
+        if jdata.get("conditioning")
+        else {"fparam": [], "aparam": []}
+    )
     mass_map = jdata["mass_map"]
     use_plm = jdata.get("model_devi_plumed", False)
     use_plm_path = jdata.get("model_devi_plumed_path", False)
@@ -2804,7 +2814,11 @@ def _make_model_devi_native(iter_index, jdata, mdata, conf_systems):
         raise RuntimeError("system index should be uniq")
 
     use_ele_temp = jdata.get("use_ele_temp", 0)
-    conditioning = _normalize_conditioning(jdata)
+    conditioning = (
+        _normalize_conditioning(jdata)
+        if jdata.get("conditioning")
+        else {"fparam": [], "aparam": []}
+    )
     (
         model_devi_dt,
         model_devi_neidelay,

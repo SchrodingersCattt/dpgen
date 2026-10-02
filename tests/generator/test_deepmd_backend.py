@@ -18,6 +18,7 @@ from dpgen.generator.run import (
     _get_input_model_suffix,
     _get_model_suffix,
     _get_train_backend_flag,
+    _extract_conditioning_arrays,
     _normalize_conditioning,
     _normalize_training_params,
     _prepare_training_input,
@@ -569,6 +570,16 @@ class TestRunTrainDeepmdBackend(unittest.TestCase):
         for branch in item["model"]["model_dict"].values():
             self.assertEqual(branch["fitting_net"]["numb_fparam"], 3)
             self.assertEqual(branch["fitting_net"]["numb_aparam"], 1)
+
+    def test_conditioning_reads_native_job_params(self):
+        conditioning = _normalize_conditioning(
+            {"conditioning": {"fparam": [{"name": "temperature", "dim": 1}]}}
+        )
+        arrays = _extract_conditioning_arrays(
+            {"params": {"temperature": 300.0}}, conditioning, 2
+        )
+        self.assertEqual(arrays["fparam"].shape, (1, 1))
+        self.assertEqual(float(arrays["fparam"][0, 0]), 300.0)
 
     def test_conditioning_rejects_legacy_conflict(self):
         with self.assertRaisesRegex(ValueError, "cannot be configured together"):
