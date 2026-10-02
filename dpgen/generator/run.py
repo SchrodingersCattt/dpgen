@@ -974,7 +974,7 @@ def _normalize_conditioning(jdata):
     use_ele_temp = jdata.get("use_ele_temp", 0)
     if raw is not None and not isinstance(raw, dict):
         raise TypeError("conditioning must be a mapping when provided")
-    if raw and use_ele_temp:
+    if raw is not None and use_ele_temp:
         raise ValueError(
             "conditioning and nonzero use_ele_temp cannot be configured together"
         )
