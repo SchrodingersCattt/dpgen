@@ -18,6 +18,7 @@ from dpgen.generator.run import (
     _get_input_model_suffix,
     _get_model_suffix,
     _get_train_backend_flag,
+    _normalize_conditioning,
     _normalize_training_params,
     _prepare_training_input,
     _validate_dpa_training_config,
@@ -524,6 +525,59 @@ class TestRunTrainDeepmdBackend(unittest.TestCase):
             for branch in item["model"]["model_dict"].values():
                 self.assertEqual(branch["fitting_net"][enabled], 1)
                 self.assertNotIn(removed, branch["fitting_net"])
+
+    def test_prepare_training_input_sets_generic_conditioning_for_model_dict(self):
+        conditioning = _normalize_conditioning(
+            {
+                "conditioning": {
+                    "fparam": [
+                        {"name": "temperature", "source": "temperature", "dim": 1},
+                        {"name": "pressure", "source": "pressure", "dim": 2},
+                    ],
+                    "aparam": [
+                        {"name": "local", "source": "local", "dim": 1}
+                    ],
+                }
+            }
+        )
+        item = {
+            "model": {
+                "model_dict": {
+                    "a": {"fitting_net": {}},
+                    "b": {"fitting_net": {}},
+                }
+            },
+            "training": {},
+        }
+        _prepare_training_input(
+            item,
+            "3.2.0",
+            ["system"],
+            [1],
+            ["H"],
+            0,
+            None,
+            0,
+            None,
+            "auto",
+            None,
+            None,
+            None,
+            None,
+            conditioning=conditioning,
+        )
+        for branch in item["model"]["model_dict"].values():
+            self.assertEqual(branch["fitting_net"]["numb_fparam"], 3)
+            self.assertEqual(branch["fitting_net"]["numb_aparam"], 1)
+
+    def test_conditioning_rejects_legacy_conflict(self):
+        with self.assertRaisesRegex(ValueError, "cannot be configured together"):
+            _normalize_conditioning(
+                {
+                    "use_ele_temp": 1,
+                    "conditioning": {"fparam": []},
+                }
+            )
 
     def test_make_train_generates_cross_architecture_inputs(self):
         jdata = {
