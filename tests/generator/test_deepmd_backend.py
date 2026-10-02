@@ -535,9 +535,7 @@ class TestRunTrainDeepmdBackend(unittest.TestCase):
                         {"name": "temperature", "source": "temperature", "dim": 1},
                         {"name": "pressure", "source": "pressure", "dim": 2},
                     ],
-                    "aparam": [
-                        {"name": "local", "source": "local", "dim": 1}
-                    ],
+                    "aparam": [{"name": "local", "source": "local", "dim": 1}],
                 }
             }
         )

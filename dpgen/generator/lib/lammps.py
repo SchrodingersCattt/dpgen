@@ -35,7 +35,9 @@ def conditioning_keywords(conditioning):
         for item in conditioning.get(location, []):
             variables.extend(conditioning_variable_names(conditioning, location, item))
         if variables:
-            parts.append(location + " " + " ".join(f"${{{name}}}" for name in variables))
+            parts.append(
+                location + " " + " ".join(f"${{{name}}}" for name in variables)
+            )
     return " ".join(parts)
 
 
