@@ -506,7 +506,13 @@ The union of the two sets is made as candidate dataset."
             "model_devi_recovery",
             dict,
             optional=True,
-            default={"enabled": False, "max_failed_tasks": 0, "max_failed_ratio": 0.0, "salvage_prefix": False, "min_valid_frames": 1},
+            default={
+                "enabled": False,
+                "max_failed_tasks": 0,
+                "max_failed_ratio": 0.0,
+                "salvage_prefix": False,
+                "min_valid_frames": 1,
+            },
             doc=doc_model_devi_recovery,
         ),
         Argument(

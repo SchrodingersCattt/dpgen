@@ -3426,11 +3426,22 @@ def _normalize_model_devi_recovery(jdata):
         "salvage_prefix": bool(raw.get("salvage_prefix", False)),
         "min_valid_frames": raw.get("min_valid_frames", 1),
     }
-    if not isinstance(policy["max_failed_tasks"], int) or isinstance(policy["max_failed_tasks"], bool) or policy["max_failed_tasks"] < 0:
+    if (
+        not isinstance(policy["max_failed_tasks"], int)
+        or isinstance(policy["max_failed_tasks"], bool)
+        or policy["max_failed_tasks"] < 0
+    ):
         raise ValueError("model_devi_recovery.max_failed_tasks must be nonnegative")
-    if not isinstance(policy["max_failed_ratio"], (int, float)) or not 0 <= float(policy["max_failed_ratio"]) <= 1:
+    if (
+        not isinstance(policy["max_failed_ratio"], (int, float))
+        or not 0 <= float(policy["max_failed_ratio"]) <= 1
+    ):
         raise ValueError("model_devi_recovery.max_failed_ratio must be in [0, 1]")
-    if not isinstance(policy["min_valid_frames"], int) or isinstance(policy["min_valid_frames"], bool) or policy["min_valid_frames"] < 1:
+    if (
+        not isinstance(policy["min_valid_frames"], int)
+        or isinstance(policy["min_valid_frames"], bool)
+        or policy["min_valid_frames"] < 1
+    ):
         raise ValueError("model_devi_recovery.min_valid_frames must be positive")
     return policy
 
@@ -3453,7 +3464,11 @@ def _read_lammps_dump_steps(filename):
             if not lines[cursor + 4].startswith("ITEM: BOX BOUNDS"):
                 raise ValueError("missing box header")
             box_start = cursor + 5
-            box = [float(x) for line in lines[box_start:box_start + 3] for x in line.split()]
+            box = [
+                float(x)
+                for line in lines[box_start : box_start + 3]
+                for x in line.split()
+            ]
             if len(box) < 6 or not np.all(np.isfinite(box)):
                 raise ValueError("invalid box")
             header_index = box_start + 3
@@ -3464,7 +3479,7 @@ def _read_lammps_dump_steps(filename):
             if not required.issubset(fields):
                 raise ValueError("atom header lacks id/type/coordinates/forces")
             offsets = {name: fields.index(name) for name in required}
-            rows = lines[header_index + 1:header_index + 1 + natoms]
+            rows = lines[header_index + 1 : header_index + 1 + natoms]
             if len(rows) != natoms:
                 raise ValueError("truncated atom frame")
             mapping = []
@@ -3474,7 +3489,10 @@ def _read_lammps_dump_steps(filename):
                     raise ValueError("truncated atom row")
                 atom_id = int(values[offsets["id"]])
                 atom_type = int(values[offsets["type"]])
-                numbers = [float(values[offsets[name]]) for name in ("x", "y", "z", "fx", "fy", "fz")]
+                numbers = [
+                    float(values[offsets[name]])
+                    for name in ("x", "y", "z", "fx", "fy", "fz")
+                ]
                 if not np.all(np.isfinite(numbers)):
                     raise ValueError("non-finite atom data")
                 mapping.append((atom_id, atom_type))
@@ -3496,13 +3514,26 @@ def _recovery_task_report(task_path, model_devi_merge_traj, salvage_prefix):
     task_path = Path(task_path)
     model_file = task_path / "model_devi.out"
     if not model_file.is_file():
-        return {"task": task_path.name, "status": "missing", "valid_steps": [], "excluded_steps": [], "invalid_frames": 0, "reason": "model_devi.out is missing"}
+        return {
+            "task": task_path.name,
+            "status": "missing",
+            "valid_steps": [],
+            "excluded_steps": [],
+            "invalid_frames": 0,
+            "reason": "model_devi.out is missing",
+        }
     try:
         model_devi = _read_model_devi_file(str(task_path), False, model_devi_merge_traj)
         if model_devi.ndim == 1:
             model_devi = model_devi.reshape(1, -1)
-        deviation_steps = {int(row[0]) for row in model_devi if np.all(np.isfinite(row))}
-        dump_files = [task_path / "all.lammpstrj"] if model_devi_merge_traj else sorted((task_path / "traj").glob("*.lammpstrj"))
+        deviation_steps = {
+            int(row[0]) for row in model_devi if np.all(np.isfinite(row))
+        }
+        dump_files = (
+            [task_path / "all.lammpstrj"]
+            if model_devi_merge_traj
+            else sorted((task_path / "traj").glob("*.lammpstrj"))
+        )
         dump_steps, invalid_frames = set(), 0
         for dump_file in dump_files:
             metadata = _read_lammps_dump_steps(dump_file)
@@ -3512,9 +3543,26 @@ def _recovery_task_report(task_path, model_devi_merge_traj, salvage_prefix):
         excluded_steps = sorted(deviation_steps - set(valid_steps))
         status = "completed" if not invalid_frames and not excluded_steps else "failed"
         eligible = valid_steps if (status == "completed" or salvage_prefix) else []
-        return {"task": task_path.name, "status": status, "valid_steps": eligible, "excluded_steps": excluded_steps, "invalid_frames": invalid_frames, "last_valid_step": eligible[-1] if eligible else None, "reason": "" if status == "completed" else "dump/deviation mismatch or invalid frame"}
+        return {
+            "task": task_path.name,
+            "status": status,
+            "valid_steps": eligible,
+            "excluded_steps": excluded_steps,
+            "invalid_frames": invalid_frames,
+            "last_valid_step": eligible[-1] if eligible else None,
+            "reason": ""
+            if status == "completed"
+            else "dump/deviation mismatch or invalid frame",
+        }
     except (OSError, ValueError, IndexError, AssertionError) as error:
-        return {"task": task_path.name, "status": "corrupt", "valid_steps": [], "excluded_steps": [], "invalid_frames": 0, "reason": str(error)}
+        return {
+            "task": task_path.name,
+            "status": "corrupt",
+            "valid_steps": [],
+            "excluded_steps": [],
+            "invalid_frames": 0,
+            "reason": str(error),
+        }
 
 
 def _recovery_valid_steps(task_path):

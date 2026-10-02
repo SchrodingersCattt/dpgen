@@ -15,7 +15,6 @@ from dpgen.generator.run import (
     _recovery_task_report,
 )
 
-
 DUMP = """ITEM: TIMESTEP
 0
 ITEM: NUMBER OF ATOMS
@@ -32,11 +31,15 @@ ITEM: ATOMS id type x y z fx fy fz
 
 class TestModelDeviRecovery(unittest.TestCase):
     def test_policy_defaults_and_validation(self):
-        policy = _normalize_model_devi_recovery({"model_devi_recovery": {"enabled": True}})
+        policy = _normalize_model_devi_recovery(
+            {"model_devi_recovery": {"enabled": True}}
+        )
         self.assertTrue(policy["enabled"])
         self.assertEqual(policy["max_failed_tasks"], 0)
         with self.assertRaises(ValueError):
-            _normalize_model_devi_recovery({"model_devi_recovery": {"max_failed_ratio": 2}})
+            _normalize_model_devi_recovery(
+                {"model_devi_recovery": {"max_failed_ratio": 2}}
+            )
 
     def test_task_report_salvages_matching_prefix(self):
         with tempfile.TemporaryDirectory() as root:
